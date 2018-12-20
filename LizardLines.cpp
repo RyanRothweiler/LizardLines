@@ -8,6 +8,8 @@
 
 #define PRINT_LOG false
 
+unsigned long long typedef uint64;
+
 #pragma pack(push,1)
 struct entry {
 	int Year;
@@ -21,9 +23,47 @@ struct entry {
 };
 #pragma pack(pop)
 
-int CountLines(char* Dir)
+uint64 CountLinesFile(char* FileDir)
 {
-	int LinesCount = 0;
+	uint64 LinesCount = 0;
+
+	HANDLE FileHandle;
+	FileHandle = CreateFile(FileDir, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+
+	if (FileHandle != INVALID_HANDLE_VALUE) {
+		DWORD BytesCount = GetFileSize(FileHandle, NULL);
+
+		void *FileBuffer = malloc(BytesCount);
+		DWORD BytesReadCount;
+		ReadFile(FileHandle, FileBuffer, BytesCount, &BytesReadCount, NULL);
+
+		char* CharBuffer = (char *)FileBuffer;
+		for (int FileIndex = 0; FileIndex < BytesCount; FileIndex++) {
+			if (CharBuffer[FileIndex] == '\n') {
+				LinesCount++;
+			}
+		}
+		
+	} else {
+		if (PRINT_LOG) {
+			fprintf(stdout, "Problem opening file \n");
+		}
+	}
+
+	CloseHandle(FileHandle);
+
+	// Add one for the last line
+	LinesCount += 1;
+	
+	return (LinesCount);
+}
+
+uint64 CountLines(char* Dir)
+{
+	uint64 LinesCount = 0;
+
+	// This handles the case of Dir pointing directly to a file
+	LinesCount += CountLinesFile(Dir);
 
 	if (PRINT_LOG) {
 		fprintf(stdout, "Checking directory %s \n", Dir);
@@ -55,31 +95,7 @@ int CountLines(char* Dir)
 						fprintf(stdout, "Opening File %s \n", FileDir);
 					}
 
-					HANDLE FileHandle;
-					FileHandle = CreateFile(FileDir, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-
-					if (FileHandle != INVALID_HANDLE_VALUE) {
-						int BytesCount = FileData.nFileSizeLow;
-
-						void *FileBuffer = malloc(BytesCount);
-						DWORD BytesReadCount;
-						ReadFile(FileHandle, FileBuffer, BytesCount, &BytesReadCount, NULL);
-
-						char* CharBuffer = (char *)FileBuffer;
-						for (int FileIndex = 0; FileIndex < BytesCount; FileIndex++) {
-							if (CharBuffer[FileIndex] == '\n') {
-								LinesCount++;
-							}
-						}
-
-						LinesCount -= 2;
-					} else {
-						if (PRINT_LOG) {
-							fprintf(stdout, "Problem opening file \n");
-						}
-					}
-
-					CloseHandle(FileHandle);
+					LinesCount += CountLinesFile(FileDir);
 				}
 			}
 		}
@@ -88,19 +104,12 @@ int CountLines(char* Dir)
 	return (LinesCount);
 }
 
-// struct csv
-// {
-// 	char Data[100000];
-// 	int CharIndex;
-// };
-
 char* IntToChar(int Input)
 {
 	char* Buffer = (char *)malloc(sizeof(char) * 100);
 	sprintf(Buffer, "%d", Input);
 	return (Buffer);
 }
-
 
 int
 main(int ArgCount, char **Args)
@@ -145,36 +154,55 @@ main(int ArgCount, char **Args)
 			DWORD BytesWritten;
 			WriteFile(CSVHandle, FinalFile, sizeof(FinalFile), &BytesWritten, NULL);
 		} else {
-			char* Path = Args[1];
+			char* PathFilesCounting = Args[1];
 			char* OutputFile = Args[2];
-			int LinesCount;
 
+			bool addEntry = false;
 			int HistoryFileHandle = _open(OutputFile, _O_RDWR | _O_BINARY, _S_IREAD | _S_IWRITE);
-			if (HistoryFileHandle != -1) {
-				SYSTEMTIME SystemTime = {};
-				GetLocalTime(&SystemTime);
+			if (HistoryFileHandle == -1) {
+				int HistoryFileHandle = _open(OutputFile, _O_RDWR | _O_BINARY | _O_CREAT, _S_IREAD | _S_IWRITE);
+				addEntry = true;
+			}
 
-				int LinesCount = CountLines(Path);
+			if (!addEntry) {
+				// Only update if we haven't saved an entry for today
+
+				SYSTEMTIME CurrentTime = {};
+				GetLocalTime(&CurrentTime);
+
+				// Get the previous entry time
+				void *FileData = malloc(sizeof(SYSTEMTIME));
+				_read(HistoryFileHandle, FileData, sizeof(SYSTEMTIME));
+				SYSTEMTIME* PrevEntryTime = (SYSTEMTIME*)FileData;
+
+				// Not adding new entry, because there already is one for today
+				addEntry = true;
+			}
+
+			if (addEntry) {
+
+				uint64 LinesCount = CountLines(PathFilesCounting);
+
+				SYSTEMTIME CurrentTime = {};
+				GetLocalTime(&CurrentTime);
 
 				entry NewEntry = {};
 				NewEntry.LinesCount = LinesCount;
-				NewEntry.Year = SystemTime.wYear;
-				NewEntry.Month = SystemTime.wMonth;
-				NewEntry.Day = SystemTime.wDay;
-				NewEntry.Hour = SystemTime.wHour;
-				NewEntry.Minute = SystemTime.wMinute;
-				NewEntry.Second = SystemTime.wSecond;
+				NewEntry.Year = CurrentTime.wYear;
+				NewEntry.Month = CurrentTime.wMonth;
+				NewEntry.Day = CurrentTime.wDay;
+				NewEntry.Hour = CurrentTime.wHour;
+				NewEntry.Minute = CurrentTime.wMinute;
+				NewEntry.Second = CurrentTime.wSecond;
 
 				if ((_lseek(HistoryFileHandle, 0, SEEK_END) >= 0) &&
 				        (_write(HistoryFileHandle, &NewEntry, sizeof(NewEntry)) == sizeof(NewEntry))) {
-					// NOTE(casey): Timer begin entry was written successfully.
+					// Writing was successful
 				} else {
 					fprintf(stderr, "ERROR: Unable to append new entry to file \n");
 				}
 
-				fprintf(stdout, "LIZARD LINES: %i LOC \n", LinesCount);
-			} else {
-				fprintf(stdout, "Problem loading ll file.");
+				fprintf(stdout, "LIZARD LINES: %I64i  \n", LinesCount);
 			}
 
 			_close(HistoryFileHandle);
