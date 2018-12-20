@@ -8,24 +8,21 @@
 
 #define PRINT_LOG false
 
-unsigned long long typedef uint64;
+unsigned long typedef uint32;
 
 #pragma pack(push,1)
 struct entry {
 	int Year;
 	int Month;
 	int Day;
-	int Hour;
-	int Minute;
-	int Second;
 
-	int LinesCount;
+	uint32 LinesCount;
 };
 #pragma pack(pop)
 
-uint64 CountLinesFile(char* FileDir)
+uint32 CountLinesFile(char* FileDir)
 {
-	uint64 LinesCount = 0;
+	uint32 LinesCount = 0;
 
 	HANDLE FileHandle;
 	FileHandle = CreateFile(FileDir, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -43,7 +40,7 @@ uint64 CountLinesFile(char* FileDir)
 				LinesCount++;
 			}
 		}
-		
+
 	} else {
 		if (PRINT_LOG) {
 			fprintf(stdout, "Problem opening file \n");
@@ -54,13 +51,13 @@ uint64 CountLinesFile(char* FileDir)
 
 	// Add one for the last line
 	LinesCount += 1;
-	
+
 	return (LinesCount);
 }
 
-uint64 CountLines(char* Dir)
+uint32 CountLines(char* Dir)
 {
-	uint64 LinesCount = 0;
+	uint32 LinesCount = 0;
 
 	// This handles the case of Dir pointing directly to a file
 	LinesCount += CountLinesFile(Dir);
@@ -125,6 +122,7 @@ main(int ArgCount, char **Args)
 			DWORD BytesReadCount;
 			ReadFile(HistoryFileHandle, FileData, BytesCount, &BytesReadCount, NULL);
 
+			// TODO make this the correct size always
 			char FinalFile[100000] = {};
 
 			strcat(FinalFile, "Year,Month,Day,Hour,Minute,Second,LinesCount\n");
@@ -139,12 +137,6 @@ main(int ArgCount, char **Args)
 				strcat(FinalFile, ",");
 				strcat(FinalFile, IntToChar(NextEntry->Day));
 				strcat(FinalFile, ",");
-				strcat(FinalFile, IntToChar(NextEntry->Hour));
-				strcat(FinalFile, ",");
-				strcat(FinalFile, IntToChar(NextEntry->Minute));
-				strcat(FinalFile, ",");
-				strcat(FinalFile, IntToChar(NextEntry->Second));
-				strcat(FinalFile, ",");
 				strcat(FinalFile, IntToChar(NextEntry->LinesCount));
 
 				strcat(FinalFile, "\n");
@@ -157,53 +149,55 @@ main(int ArgCount, char **Args)
 			char* PathFilesCounting = Args[1];
 			char* OutputFile = Args[2];
 
-			bool addEntry = false;
 			int HistoryFileHandle = _open(OutputFile, _O_RDWR | _O_BINARY, _S_IREAD | _S_IWRITE);
-			if (HistoryFileHandle == -1) {
-				int HistoryFileHandle = _open(OutputFile, _O_RDWR | _O_BINARY | _O_CREAT, _S_IREAD | _S_IWRITE);
-				addEntry = true;
-			}
 
-			if (!addEntry) {
-				// Only update if we haven't saved an entry for today
+			// Check if we've alrady entered an entry for today
+			if (HistoryFileHandle != -1) {
 
-				SYSTEMTIME CurrentTime = {};
-				GetLocalTime(&CurrentTime);
+				_lseek(HistoryFileHandle, 0, SEEK_END);
+				int BytesCount = tell(HistoryFileHandle);
+				_lseek(HistoryFileHandle, 0, SEEK_SET);
 
-				// Get the previous entry time
-				void *FileData = malloc(sizeof(SYSTEMTIME));
+				int HistoryCount = BytesCount / sizeof(entry);
+
+				void *FileData = malloc(sizeof(entry) * HistoryCount);
 				_read(HistoryFileHandle, FileData, sizeof(SYSTEMTIME));
-				SYSTEMTIME* PrevEntryTime = (SYSTEMTIME*)FileData;
 
-				// Not adding new entry, because there already is one for today
-				addEntry = true;
-			}
-
-			if (addEntry) {
-
-				uint64 LinesCount = CountLines(PathFilesCounting);
+				entry* HistoryData = (entry*)FileData;
+				entry* LastEntry = &HistoryData[HistoryCount - 1];
 
 				SYSTEMTIME CurrentTime = {};
 				GetLocalTime(&CurrentTime);
+				if (LastEntry->Day == CurrentTime.wDay) {
 
-				entry NewEntry = {};
-				NewEntry.LinesCount = LinesCount;
-				NewEntry.Year = CurrentTime.wYear;
-				NewEntry.Month = CurrentTime.wMonth;
-				NewEntry.Day = CurrentTime.wDay;
-				NewEntry.Hour = CurrentTime.wHour;
-				NewEntry.Minute = CurrentTime.wMinute;
-				NewEntry.Second = CurrentTime.wSecond;
-
-				if ((_lseek(HistoryFileHandle, 0, SEEK_END) >= 0) &&
-				        (_write(HistoryFileHandle, &NewEntry, sizeof(NewEntry)) == sizeof(NewEntry))) {
-					// Writing was successful
-				} else {
-					fprintf(stderr, "ERROR: Unable to append new entry to file \n");
+					// We already have an entry for today. So return out.
+					_close(HistoryFileHandle);
+					return 0;
 				}
-
-				fprintf(stdout, "LIZARD LINES: %I64i  \n", LinesCount);
 			}
+
+			HistoryFileHandle = _open(OutputFile, _O_RDWR | _O_BINARY | _O_CREAT, _S_IREAD | _S_IWRITE);
+
+			uint32 LinesCount = CountLines(PathFilesCounting);
+
+			SYSTEMTIME CurrentTime = {};
+			GetLocalTime(&CurrentTime);
+
+			entry NewEntry = {};
+			NewEntry.LinesCount = LinesCount;
+			NewEntry.Year = CurrentTime.wYear;
+			NewEntry.Month = CurrentTime.wMonth;
+			NewEntry.Day = CurrentTime.wDay;
+
+			if (
+			    (_lseek(HistoryFileHandle, 0, SEEK_END) >= 0) &&
+			    (_write(HistoryFileHandle, &NewEntry, sizeof(NewEntry)) == sizeof(NewEntry))
+			) {
+				fprintf(stdout, "LIZARD LINES: %I32i  \n", LinesCount);
+			} else {
+				fprintf(stderr, "ERROR: Unable to append new entry to file \n");
+			}
+
 
 			_close(HistoryFileHandle);
 		}
