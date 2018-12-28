@@ -154,14 +154,15 @@ main(int ArgCount, char **Args)
 			// Check if we've alrady entered an entry for today
 			if (HistoryFileHandle != -1) {
 
+				// Get the size of the file
 				_lseek(HistoryFileHandle, 0, SEEK_END);
 				int BytesCount = tell(HistoryFileHandle);
 				_lseek(HistoryFileHandle, 0, SEEK_SET);
 
 				int HistoryCount = BytesCount / sizeof(entry);
 
-				void *FileData = malloc(sizeof(entry) * HistoryCount);
-				_read(HistoryFileHandle, FileData, sizeof(SYSTEMTIME));
+				void *FileData = malloc(BytesCount);
+				_read(HistoryFileHandle, FileData, BytesCount);
 
 				entry* HistoryData = (entry*)FileData;
 				entry* LastEntry = &HistoryData[HistoryCount - 1];
