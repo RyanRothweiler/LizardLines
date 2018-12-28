@@ -11,11 +11,11 @@ LizardLines is an small utility which allows you to see the change in line count
 
 # Usage
   To use simply integrate into your build process. Run the program on build. 
-    ```
-    ./LizardLines.exe PathToProjectFolder OutputFile.ll
-    ```
+```
+./LizardLines.exe PathToProjectFolder OutputFile.ll
+```
 The total number of lines in the project will be counted and saved to the file. This will only happen on the first compile of each day.
 To output the data simply run.
-    ```
-    ./LizardLines.exe -csv FileName.csv
-    ```
+```
+./LizardLines.exe -csv FileName.csv
+```
