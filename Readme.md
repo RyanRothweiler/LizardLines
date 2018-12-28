@@ -10,9 +10,13 @@ LizardLines is an small utility which allows you to see the change in line count
   - Export the data as a .csv
 
 # Usage
-  To use simply integrate into your build process. Run the program on build. 
+To use simply integrate into your build process. Run the program on build.
 ```
-./LizardLines.exe PathToProjectFolder OutputFile.ll
+./LizardLines.exe PathToProjectFolder OutputFile.ll 
+```
+You have the option to specify specific file types. If no specific file types are given, then java, cpp, h, py files will be counted.
+```
+./LizardLines.exe PathToProjectFolder OutputFile.ll java cpp
 ```
 The total number of lines in the project will be counted and saved to the file. This will only happen on the first compile of each day.
 To output the data simply run.

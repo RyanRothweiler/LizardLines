@@ -20,9 +20,58 @@ struct entry {
 };
 #pragma pack(pop)
 
+char** FileTypes;
+int FileTypesCount = 0;
+
+char* DefaultFileTypes[] = {
+	"java", "cpp", "h", "py"
+};
+
+
 uint32 CountLinesFile(char* FileDir)
 {
 	uint32 LinesCount = 0;
+
+	// Make sure the file is of the correct type. Start at the end of the path making sure it matches one of our file types
+	int DirLength = strlen(FileDir);
+
+	bool* Matches = (bool*)malloc(sizeof(bool) * FileTypesCount);
+	for (int Index = 0; Index < FileTypesCount; Index++) {
+		Matches[Index] = true;
+	}
+
+	int PotentialMatchCount = FileTypesCount;
+	for (int DirIndex = DirLength - 1; DirIndex >= 0; DirIndex--) {
+
+		for (int TypeIndex = 0; TypeIndex < FileTypesCount; TypeIndex++) {
+
+			if (Matches[TypeIndex]) {
+
+				int TypeLength = strlen(FileTypes[TypeIndex]);
+
+				// - 1 because of zero indexing
+				int DirCountMoved = DirLength - DirIndex - 1;
+				int TypeEndIndex = TypeLength - DirCountMoved - 1;
+				if (FileTypes[TypeIndex][TypeEndIndex] == FileDir[DirIndex]) {
+
+					// If we're at the end of the type. then we know the types match
+					if (strlen(FileTypes[TypeIndex]) <= DirCountMoved + 1) {
+						goto VALIDFILE;
+					}
+				} else {
+					Matches[TypeIndex] = false;
+
+					// If there are no more potential matches left, then this isn't the correct type.
+					PotentialMatchCount--;
+					if (PotentialMatchCount <= 0) {
+						return 0;
+					}
+				}
+			}
+		}
+	}
+
+VALIDFILE:
 
 	HANDLE FileHandle;
 	FileHandle = CreateFile(FileDir, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -111,98 +160,113 @@ char* IntToChar(int Input)
 int
 main(int ArgCount, char **Args)
 {
-	if (ArgCount == 3) {
-		if (strcmp(Args[1], "-csv") == 0) {
-			char* History = Args[2];
-			HANDLE HistoryFileHandle = CreateFile(History, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-			int BytesCount = GetFileSize(HistoryFileHandle, NULL);
+	if (strcmp(Args[1], "-csv") == 0) {
+		char* History = Args[2];
+		HANDLE HistoryFileHandle = CreateFile(History, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+		int BytesCount = GetFileSize(HistoryFileHandle, NULL);
+		int HistoryCount = BytesCount / sizeof(entry);
+
+		void *FileData = malloc(sizeof(entry) * HistoryCount);
+		DWORD BytesReadCount;
+		ReadFile(HistoryFileHandle, FileData, BytesCount, &BytesReadCount, NULL);
+
+		// TODO make this the correct size always
+		char FinalFile[100000] = {};
+
+		strcat(FinalFile, "Year,Month,Day,Hour,Minute,Second,LinesCount\n");
+
+		entry* HistoryData = (entry*)FileData;
+		for (int EntryIndex = 0; EntryIndex < HistoryCount; EntryIndex++) {
+			entry* NextEntry = &HistoryData[EntryIndex];
+
+			strcat(FinalFile, IntToChar(NextEntry->Year));
+			strcat(FinalFile, ",");
+			strcat(FinalFile, IntToChar(NextEntry->Month));
+			strcat(FinalFile, ",");
+			strcat(FinalFile, IntToChar(NextEntry->Day));
+			strcat(FinalFile, ",");
+			strcat(FinalFile, IntToChar(NextEntry->LinesCount));
+
+			strcat(FinalFile, "\n");
+		}
+
+		HANDLE CSVHandle = CreateFile("CSV.csv", GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+		DWORD BytesWritten;
+		WriteFile(CSVHandle, FinalFile, sizeof(FinalFile), &BytesWritten, NULL);
+	} else {
+		char* PathFilesCounting = Args[1];
+		char* OutputFile = Args[2];
+
+		int HistoryFileHandle = _open(OutputFile, _O_RDWR | _O_BINARY, _S_IREAD | _S_IWRITE);
+
+		// Check if we've alrady entered an entry for today
+		if (HistoryFileHandle != -1) {
+
+			// Get the size of the file
+			_lseek(HistoryFileHandle, 0, SEEK_END);
+			int BytesCount = tell(HistoryFileHandle);
+			_lseek(HistoryFileHandle, 0, SEEK_SET);
+
 			int HistoryCount = BytesCount / sizeof(entry);
 
-			void *FileData = malloc(sizeof(entry) * HistoryCount);
-			DWORD BytesReadCount;
-			ReadFile(HistoryFileHandle, FileData, BytesCount, &BytesReadCount, NULL);
-
-			// TODO make this the correct size always
-			char FinalFile[100000] = {};
-
-			strcat(FinalFile, "Year,Month,Day,Hour,Minute,Second,LinesCount\n");
+			void *FileData = malloc(BytesCount);
+			_read(HistoryFileHandle, FileData, BytesCount);
 
 			entry* HistoryData = (entry*)FileData;
-			for (int EntryIndex = 0; EntryIndex < HistoryCount; EntryIndex++) {
-				entry* NextEntry = &HistoryData[EntryIndex];
-
-				strcat(FinalFile, IntToChar(NextEntry->Year));
-				strcat(FinalFile, ",");
-				strcat(FinalFile, IntToChar(NextEntry->Month));
-				strcat(FinalFile, ",");
-				strcat(FinalFile, IntToChar(NextEntry->Day));
-				strcat(FinalFile, ",");
-				strcat(FinalFile, IntToChar(NextEntry->LinesCount));
-
-				strcat(FinalFile, "\n");
-			}
-
-			HANDLE CSVHandle = CreateFile("CSV.csv", GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-			DWORD BytesWritten;
-			WriteFile(CSVHandle, FinalFile, sizeof(FinalFile), &BytesWritten, NULL);
-		} else {
-			char* PathFilesCounting = Args[1];
-			char* OutputFile = Args[2];
-
-			int HistoryFileHandle = _open(OutputFile, _O_RDWR | _O_BINARY, _S_IREAD | _S_IWRITE);
-
-			// Check if we've alrady entered an entry for today
-			if (HistoryFileHandle != -1) {
-
-				// Get the size of the file
-				_lseek(HistoryFileHandle, 0, SEEK_END);
-				int BytesCount = tell(HistoryFileHandle);
-				_lseek(HistoryFileHandle, 0, SEEK_SET);
-
-				int HistoryCount = BytesCount / sizeof(entry);
-
-				void *FileData = malloc(BytesCount);
-				_read(HistoryFileHandle, FileData, BytesCount);
-
-				entry* HistoryData = (entry*)FileData;
-				entry* LastEntry = &HistoryData[HistoryCount - 1];
-
-				SYSTEMTIME CurrentTime = {};
-				GetLocalTime(&CurrentTime);
-				if (LastEntry->Day == CurrentTime.wDay) {
-
-					// We already have an entry for today. So return out.
-					_close(HistoryFileHandle);
-					return 0;
-				}
-			}
-
-			HistoryFileHandle = _open(OutputFile, _O_RDWR | _O_BINARY | _O_CREAT, _S_IREAD | _S_IWRITE);
-
-			uint32 LinesCount = CountLines(PathFilesCounting);
+			entry* LastEntry = &HistoryData[HistoryCount - 1];
 
 			SYSTEMTIME CurrentTime = {};
 			GetLocalTime(&CurrentTime);
+			if (LastEntry->Day == CurrentTime.wDay) {
 
-			entry NewEntry = {};
-			NewEntry.LinesCount = LinesCount;
-			NewEntry.Year = CurrentTime.wYear;
-			NewEntry.Month = CurrentTime.wMonth;
-			NewEntry.Day = CurrentTime.wDay;
-
-			if (
-			    (_lseek(HistoryFileHandle, 0, SEEK_END) >= 0) &&
-			    (_write(HistoryFileHandle, &NewEntry, sizeof(NewEntry)) == sizeof(NewEntry))
-			) {
-				fprintf(stdout, "LIZARD LINES: %I32i  \n", LinesCount);
-			} else {
-				fprintf(stderr, "ERROR: Unable to append new entry to file \n");
+				// We already have an entry for today. So return out.
+				_close(HistoryFileHandle);
+				return 0;
 			}
-
-
-			_close(HistoryFileHandle);
 		}
-	} else {
-		fprintf(stdout, "Usage: \n	LizardLines <code dir> <output file dir> \n 	-csv : output csv file of current stats \n");
+
+		HistoryFileHandle = _open(OutputFile, _O_RDWR | _O_BINARY | _O_CREAT, _S_IREAD | _S_IWRITE);
+
+		FileTypesCount = ArgCount - 3;
+		if (FileTypesCount > 0) {
+			// Use the arguments provided
+
+			FileTypes = (char**)malloc(FileTypesCount * sizeof(char*));
+			for (int index = 0; index < FileTypesCount; index++) {
+				FileTypes[index] = Args[index + 3];
+			}
+		} else {
+			// Fill with default info
+
+			FileTypesCount = sizeof(DefaultFileTypes) / sizeof(DefaultFileTypes[0]);
+			FileTypes = (char**)malloc(FileTypesCount * sizeof(char*));
+
+			for (int index = 0; index < FileTypesCount; index++) {
+				FileTypes[index] = DefaultFileTypes[index];
+			}
+		}
+
+		uint32 LinesCount = CountLines(PathFilesCounting);
+
+		SYSTEMTIME CurrentTime = {};
+		GetLocalTime(&CurrentTime);
+
+		entry NewEntry = {};
+		NewEntry.LinesCount = LinesCount;
+		NewEntry.Year = CurrentTime.wYear;
+		NewEntry.Month = CurrentTime.wMonth;
+		NewEntry.Day = CurrentTime.wDay;
+
+		if (
+		    (_lseek(HistoryFileHandle, 0, SEEK_END) >= 0) &&
+		    (_write(HistoryFileHandle, &NewEntry, sizeof(NewEntry)) == sizeof(NewEntry))
+		) {
+			fprintf(stdout, "LIZARD LINES: %I32i  \n", LinesCount);
+		} else {
+			fprintf(stderr, "ERROR: Unable to append new entry to file \n");
+		}
+
+
+		_close(HistoryFileHandle);
 	}
 }
