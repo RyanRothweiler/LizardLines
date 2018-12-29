@@ -126,14 +126,18 @@ uint32 CountLines(char* Dir)
 		while (FindNextFile(FileHandle, &FileData)) {
 			if (FileData.cFileName[0] != '.') {
 				if (FileData.dwFileAttributes == FILE_ATTRIBUTE_DIRECTORY) {
-					char ChildDir[100];
+
+					char ChildDir[MAX_PATH];
+
 					strcpy(ChildDir, Dir);
 					strcat(ChildDir, FileData.cFileName);
 					strcat(ChildDir, "\\");
 
 					LinesCount += CountLines(ChildDir);
 				} else {
-					char FileDir[100];
+
+					char FileDir[MAX_PATH];
+
 					strcpy(FileDir, Dir);
 					strcat(FileDir, FileData.cFileName);
 
@@ -178,9 +182,16 @@ main(int ArgCount, char **Args)
 			void *FileData = malloc(BytesCount);
 			_read(HistoryFileHandle, FileData, BytesCount);
 
-			char FinalFile[100000] = {};
 
-			strcat(FinalFile, "Year,Month,Day,LinesCount\n");
+			char* Header = "Year,Month,Day,LinesCount\n";
+
+			// This is a guestimate, but always larger than the actual
+			int MaxPerHistory = 20;
+			int OutputFileSize = (HistoryCount * MaxPerHistory) + strlen(Header);
+			char* FinalFile = (char*)malloc(OutputFileSize);
+			ZeroMemory(FinalFile, OutputFileSize);
+
+			strcat(FinalFile, Header);
 
 			entry* HistoryData = (entry*)FileData;
 			for (int EntryIndex = 0; EntryIndex < HistoryCount; EntryIndex++) {
@@ -199,7 +210,7 @@ main(int ArgCount, char **Args)
 
 			int OutputFile = _open(OutputFilePath, _O_RDWR | _O_BINARY | _O_CREAT, _S_IREAD | _S_IWRITE);
 			if (OutputFile != -1 &&
-			        _write(OutputFile, &FinalFile, sizeof(FinalFile)) == sizeof(FinalFile)) {
+			        _write(OutputFile, FinalFile, OutputFileSize) == OutputFileSize) {
 				fprintf(stdout, "Successfully wrote file. \n");
 			} else {
 				fprintf(stderr, "ERROR: Unable to write final file. \n");
