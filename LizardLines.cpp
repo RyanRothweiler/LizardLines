@@ -161,38 +161,50 @@ int
 main(int ArgCount, char **Args)
 {
 	if (strcmp(Args[1], "-csv") == 0) {
-		char* History = Args[2];
-		HANDLE HistoryFileHandle = CreateFile(History, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-		int BytesCount = GetFileSize(HistoryFileHandle, NULL);
-		int HistoryCount = BytesCount / sizeof(entry);
 
-		void *FileData = malloc(sizeof(entry) * HistoryCount);
-		DWORD BytesReadCount;
-		ReadFile(HistoryFileHandle, FileData, BytesCount, &BytesReadCount, NULL);
+		char* HistoryFilePath = Args[2];
+		char* OutputFilePath = Args[3];
 
-		// TODO make this the correct size always
-		char FinalFile[100000] = {};
+		int HistoryFileHandle = _open(HistoryFilePath, _O_RDWR | _O_BINARY, _S_IREAD | _S_IWRITE);
+		if (HistoryFileHandle != -1) {
 
-		strcat(FinalFile, "Year,Month,Day,Hour,Minute,Second,LinesCount\n");
+			// Get the size of the file
+			_lseek(HistoryFileHandle, 0, SEEK_END);
+			int BytesCount = tell(HistoryFileHandle);
+			_lseek(HistoryFileHandle, 0, SEEK_SET);
 
-		entry* HistoryData = (entry*)FileData;
-		for (int EntryIndex = 0; EntryIndex < HistoryCount; EntryIndex++) {
-			entry* NextEntry = &HistoryData[EntryIndex];
+			int HistoryCount = BytesCount / sizeof(entry);
 
-			strcat(FinalFile, IntToChar(NextEntry->Year));
-			strcat(FinalFile, ",");
-			strcat(FinalFile, IntToChar(NextEntry->Month));
-			strcat(FinalFile, ",");
-			strcat(FinalFile, IntToChar(NextEntry->Day));
-			strcat(FinalFile, ",");
-			strcat(FinalFile, IntToChar(NextEntry->LinesCount));
+			void *FileData = malloc(BytesCount);
+			_read(HistoryFileHandle, FileData, BytesCount);
 
-			strcat(FinalFile, "\n");
+			char FinalFile[100000] = {};
+
+			strcat(FinalFile, "Year,Month,Day,LinesCount\n");
+
+			entry* HistoryData = (entry*)FileData;
+			for (int EntryIndex = 0; EntryIndex < HistoryCount; EntryIndex++) {
+				entry* NextEntry = &HistoryData[EntryIndex];
+
+				strcat(FinalFile, IntToChar(NextEntry->Year));
+				strcat(FinalFile, ",");
+				strcat(FinalFile, IntToChar(NextEntry->Month));
+				strcat(FinalFile, ",");
+				strcat(FinalFile, IntToChar(NextEntry->Day));
+				strcat(FinalFile, ",");
+				strcat(FinalFile, IntToChar(NextEntry->LinesCount));
+
+				strcat(FinalFile, "\n");
+			}
+
+			int OutputFile = _open(OutputFilePath, _O_RDWR | _O_BINARY | _O_CREAT, _S_IREAD | _S_IWRITE);
+			if (OutputFile != -1 &&
+			        _write(OutputFile, &FinalFile, sizeof(FinalFile)) == sizeof(FinalFile)) {
+				fprintf(stdout, "Successfully wrote file. \n");
+			} else {
+				fprintf(stderr, "ERROR: Unable to write final file. \n");
+			}
 		}
-
-		HANDLE CSVHandle = CreateFile("CSV.csv", GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-		DWORD BytesWritten;
-		WriteFile(CSVHandle, FinalFile, sizeof(FinalFile), &BytesWritten, NULL);
 	} else {
 		char* PathFilesCounting = Args[1];
 		char* OutputFile = Args[2];
